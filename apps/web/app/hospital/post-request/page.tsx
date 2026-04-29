@@ -2,11 +2,11 @@
 
 import React from "react";
 import { Droplet, Loader2, PlusCircle, CheckCircle, AlertCircle, Syringe, Clock } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 export default function HospitalPostRequestPage() {
-	const [loading, setLoading] = React.useState(false);
 	const [success, setSuccess] = React.useState("");
 	const [error, setError] = React.useState("");
 	const [formData, setFormData] = React.useState({
@@ -23,13 +23,10 @@ export default function HospitalPostRequestPage() {
 		}));
 	};
 
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setLoading(true);
-		setError("");
-		setSuccess("");
+	const queryClient = useQueryClient();
 
-		try {
+	const postRequestMutation = useMutation({
+		mutationFn: async () => {
 			const storedUser = localStorage.getItem("user");
 			const parsed = storedUser ? JSON.parse(storedUser) : null;
 
@@ -46,20 +43,33 @@ export default function HospitalPostRequestPage() {
 			});
 
 			const data = await res.json();
-			if (!res.ok) {
-				throw new Error(data?.message || "Failed to post request");
-			}
-
+			if (!res.ok) throw new Error(data?.message || "Failed to post request");
+			return data as unknown;
+		},
+		onMutate: () => {
+			setError("");
+			setSuccess("");
+		},
+		onSuccess: async () => {
 			setSuccess("Request Created Successfully!");
 			setFormData({ blood_group: "O+", units: 1, urgency: "normal" });
-			
-			// Clear success message after 5 seconds
 			setTimeout(() => setSuccess(""), 5000);
-		} catch (err: any) {
-			setError(err.message || "Failed to post request");
-		} finally {
-			setLoading(false);
-		}
+
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: ["requests", "all"] }),
+				queryClient.invalidateQueries({ queryKey: ["hospital", "requests"] }),
+				queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+				queryClient.invalidateQueries({ queryKey: ["requests", "recentActivity"] }),
+			]);
+		},
+		onError: (err) => {
+			setError(err instanceof Error ? err.message : "Failed to post request");
+		},
+	});
+
+	const handleSubmit = (e: React.FormEvent) => {
+		e.preventDefault();
+		postRequestMutation.mutate();
 	};
 
 	return (
@@ -136,24 +146,24 @@ export default function HospitalPostRequestPage() {
 
 						{success && (
 							<div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-3 text-emerald-400 text-sm font-bold animate-in slide-in-from-top-2 duration-300">
-								<CheckCircle className="w-5 h-5 flex-shrink-0" />
+								<CheckCircle className="w-5 h-5 shrink-0" />
 								<span>{success}</span>
 							</div>
 						)}
 
 						{error && (
 							<div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl flex items-center gap-3 text-rose-500 text-sm font-bold animate-in slide-in-from-top-2 duration-300">
-								<AlertCircle className="w-5 h-5 flex-shrink-0" />
+								<AlertCircle className="w-5 h-5 shrink-0" />
 								<span>{error}</span>
 							</div>
 						)}
 
 						<button
 							type="submit"
-							disabled={loading}
+							disabled={postRequestMutation.isPending}
 							className="w-full bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 disabled:cursor-not-allowed text-white font-black py-5 rounded-2xl transition-all shadow-xl shadow-rose-600/30 flex items-center justify-center gap-3"
 						>
-							{loading ? (
+							{postRequestMutation.isPending ? (
 								<>
 									<Loader2 className="w-6 h-6 animate-spin" />
 									Posting Request...

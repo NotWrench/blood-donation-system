@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
-import { Users, Droplet, Clock, Activity, TrendingUp, AlertCircle } from "lucide-react";
+import { Users, Droplet, Clock, Activity, AlertCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatCard, LowStockAlert, RecentActivity } from "./shared-components";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
@@ -23,146 +24,170 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 8000) {
   }
 }
 
+type UserRole = "admin" | "hospital" | "donor";
+type DashboardStats = {
+  cardOne: number;
+  cardTwo: number;
+  cardThree: number;
+  cardFour: number;
+};
+
+type UserRecord = {
+  id?: number | string;
+  email?: string;
+  role?: string;
+};
+
+type RequestRecord = {
+  id?: number | string;
+  status?: string;
+  urgency?: string;
+};
+
+type OverviewData = {
+  stats: DashboardStats;
+  ctaLabel: string;
+  ctaDescription: string;
+};
+
 export default function DashboardOverview() {
   const router = useRouter();
-  const [userRole, setUserRole] = useState<"admin" | "hospital" | "donor">("donor");
-  const [userData, setUserData] = useState<any>(null);
-  const [stats, setStats] = useState({
-    cardOne: 0,
-    cardTwo: 0,
-    cardThree: 0,
-    cardFour: 0,
-  });
-  const [ctaLabel, setCtaLabel] = useState("Launch Campaign");
-  const [ctaDescription, setCtaDescription] = useState("Broadcast emergency requests to all compatible donors within a 15km radius of the hospital.");
-  const [actionLoading, setActionLoading] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
+  const userQuery = useQuery({
+    queryKey: ["auth", "user"],
+    queryFn: async () => {
+      const storedUser = localStorage.getItem("user");
+      if (!storedUser) return null;
       try {
-        const parsed = JSON.parse(storedUser);
-        const role = (parsed?.role || "donor").toLowerCase();
-        setUserRole(role === "admin" || role === "hospital" ? role : "donor");
-        setUserData(parsed);
+        return JSON.parse(storedUser) as UserRecord;
       } catch {
-        setUserRole("donor");
+        return null;
       }
-    }
-  }, []);
+    },
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        if (userRole === "admin") {
-          const [users, requests] = await Promise.all([
-            fetchJsonWithTimeout(`${API_BASE_URL}/api/users`),
-            fetchJsonWithTimeout(`${API_BASE_URL}/api/requests`),
-          ]);
+  const userRole: UserRole = React.useMemo(() => {
+    const roleRaw = userQuery.data?.role;
+    const role = (typeof roleRaw === "string" ? roleRaw : "donor").toLowerCase();
+    return role === "admin" || role === "hospital" ? role : "donor";
+  }, [userQuery.data]);
 
-          const donors = users.filter((u: any) => (u.role || "donor") === "donor").length;
-          const hospitals = users.filter((u: any) => (u.role || "donor") === "hospital").length;
-          const pending = requests.filter((r: any) => r.status === "pending").length;
+  const userEmail = React.useMemo(() => {
+    const email = userQuery.data?.email;
+    return typeof email === "string" ? email : "";
+  }, [userQuery.data]);
 
-          setStats({
-            cardOne: donors,
-            cardTwo: requests.length,
-            cardThree: hospitals,
-            cardFour: pending,
-          });
-          setCtaLabel("Approve / Reject Requests");
-          setCtaDescription("Review all incoming requests and update their status from the central admin queue.");
-        } else if (userRole === "hospital") {
-          const query = new URLSearchParams();
-          if (userData?.id) query.set("userId", String(userData.id));
-          if (userData?.email) query.set("email", userData.email);
-          const queryString = query.toString() ? `?${query.toString()}` : "";
+  const userId = React.useMemo(() => {
+    const id = userQuery.data?.id;
+    return typeof id === "number" || typeof id === "string" ? String(id) : "";
+  }, [userQuery.data]);
 
-          const hospitalRequests = await fetchJsonWithTimeout(`${API_BASE_URL}/api/hospital/requests${queryString}`);
-          const pending = hospitalRequests.filter((r: any) => r.status === "pending").length;
-          const approved = hospitalRequests.filter((r: any) => r.status === "approved").length;
-          const rejected = hospitalRequests.filter((r: any) => r.status === "rejected").length;
+  const overviewQuery = useQuery<OverviewData>({
+    queryKey: ["dashboard", "overview", userRole, userEmail, userId],
+    enabled: userQuery.isSuccess,
+    queryFn: async () => {
+      if (userRole === "admin") {
+        const [users, requests] = await Promise.all([
+          fetchJsonWithTimeout(`${API_BASE_URL}/api/users`),
+          fetchJsonWithTimeout(`${API_BASE_URL}/api/requests`),
+        ]);
 
-          setStats({
-            cardOne: hospitalRequests.length,
-            cardTwo: pending,
-            cardThree: approved,
-            cardFour: rejected,
-          });
-          setCtaLabel("Create Request");
-          setCtaDescription("Create and publish a new blood request for your hospital in just a few clicks.");
-        } else {
-          const email = userData?.email || "";
-          const [availableRequests, donorHistory] = await Promise.all([
-            fetchJsonWithTimeout(`${API_BASE_URL}/api/donor/available-requests`),
-            email ? fetchJsonWithTimeout(`${API_BASE_URL}/api/donor/history?email=${encodeURIComponent(email)}`) : Promise.resolve([]),
-          ]);
+        const donors = (users as Array<{ role?: string }>).filter((u) => (u.role || "donor") === "donor").length;
+        const hospitals = (users as Array<{ role?: string }>).filter((u) => (u.role || "donor") === "hospital").length;
+        const pending = (requests as RequestRecord[]).filter((r) => r.status === "pending").length;
 
-          const highPriority = availableRequests.filter((r: any) => r.urgency === "critical" || r.urgency === "high").length;
-          
-          // Count total donations (all entries in history are fulfilled donations)
-          const donationCount = donorHistory.length;
-
-          setStats({
-            cardOne: availableRequests.length,
-            cardTwo: highPriority,
-            cardThree: donationCount,
-            cardFour: donorHistory.length,
-          });
-          setCtaLabel("Donate / Accept Request");
-          setCtaDescription("Accept an open request and contribute immediately to a nearby emergency blood requirement.");
-        }
-        setError(null);
-      } catch (err) {
-        setError('Could not connect to the backend API. Ensure it is running and reachable.');
-      } finally {
-        setLoading(false);
+        return {
+          stats: { cardOne: donors, cardTwo: requests.length, cardThree: hospitals, cardFour: pending },
+          ctaLabel: "Approve / Reject Requests",
+          ctaDescription: "Review all incoming requests and update their status from the central admin queue.",
+        };
       }
-    };
-    fetchDashboardData();
-  }, [userRole, userData?.email, userData?.id]);
 
-  const handlePrimaryAction = async () => {
-    if (userRole === "admin") {
-      router.push("/admin/requests");
-      return;
-    }
+      if (userRole === "hospital") {
+        const query = new URLSearchParams();
+        if (userId) query.set("userId", userId);
+        if (userEmail) query.set("email", userEmail);
+        const queryString = query.toString() ? `?${query.toString()}` : "";
 
-    if (userRole === "hospital") {
-      router.push("/hospital/post-request");
-      return;
-    }
+        const hospitalRequests = await fetchJsonWithTimeout(`${API_BASE_URL}/api/hospital/requests${queryString}`);
+        const pending = (hospitalRequests as RequestRecord[]).filter((r) => r.status === "pending").length;
+        const approved = (hospitalRequests as RequestRecord[]).filter((r) => r.status === "approved").length;
+        const rejected = (hospitalRequests as RequestRecord[]).filter((r) => r.status === "rejected").length;
 
-    setActionLoading(true);
-    try {
+        return {
+          stats: { cardOne: hospitalRequests.length, cardTwo: pending, cardThree: approved, cardFour: rejected },
+          ctaLabel: "Create Request",
+          ctaDescription: "Create and publish a new blood request for your hospital in just a few clicks.",
+        };
+      }
+
+      const [availableRequests, donorHistory] = await Promise.all([
+        fetchJsonWithTimeout(`${API_BASE_URL}/api/donor/available-requests`),
+        userEmail
+          ? fetchJsonWithTimeout(`${API_BASE_URL}/api/donor/history?email=${encodeURIComponent(userEmail)}`)
+          : Promise.resolve([]),
+      ]);
+
+      const highPriority = (availableRequests as RequestRecord[]).filter(
+        (r) => r.urgency === "critical" || r.urgency === "high"
+      ).length;
+      const donationCount = donorHistory.length;
+
+      return {
+        stats: {
+          cardOne: availableRequests.length,
+          cardTwo: highPriority,
+          cardThree: donationCount,
+          cardFour: donorHistory.length,
+        },
+        ctaLabel: "Donate / Accept Request",
+        ctaDescription: "Accept an open request and contribute immediately to a nearby emergency blood requirement.",
+      };
+    },
+    refetchInterval: 3_000,
+  });
+
+  const donorPrimaryActionMutation = useMutation({
+    mutationFn: async () => {
       const available = await fetchJsonWithTimeout(`${API_BASE_URL}/api/donor/available-requests`);
-      if (!Array.isArray(available) || available.length === 0) {
-        setError("No pending requests are currently available.");
-        return;
-      }
+      if (!Array.isArray(available) || available.length === 0) throw new Error("No pending requests are currently available.");
 
-      const candidate = available.find((r: any) => r.status === "pending") || available[0];
+      const candidate =
+        (available as RequestRecord[]).find((r) => r.status === "pending") ||
+        (available as Array<{ id?: number | string }>)[0];
       const res = await fetch(`${API_BASE_URL}/api/donor/accept-request/${candidate.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userData?.email }),
+        body: JSON.stringify({ email: userEmail }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.message || "Failed to accept request");
-      }
+      if (!res.ok) throw new Error(data?.message || "Failed to accept request");
+      return { acceptedRequestId: candidate.id };
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["donor", "availableRequests"] }),
+        queryClient.invalidateQueries({ queryKey: ["donor", "history"] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory", "lowStockAlerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["requests", "recentActivity"] }),
+      ]);
+    },
+  });
 
-      window.location.reload();
-    } catch (err: any) {
-      setError(err.message || "Failed to accept request");
-    } finally {
-      setActionLoading(false);
-    }
+  const handlePrimaryAction = async () => {
+    if (userRole === "admin") return void router.push("/admin/requests");
+    if (userRole === "hospital") return void router.push("/hospital/post-request");
+    await donorPrimaryActionMutation.mutateAsync();
   };
+
+  const loading = userQuery.isLoading || overviewQuery.isLoading;
+  const error = overviewQuery.isError
+    ? "Could not connect to the backend API. Ensure it is running and reachable."
+    : null;
 
   if (loading) {
     return (
@@ -183,6 +208,13 @@ export default function DashboardOverview() {
       </div>
     );
   }
+
+  const overview = overviewQuery.data;
+  const stats = overview?.stats ?? { cardOne: 0, cardTwo: 0, cardThree: 0, cardFour: 0 };
+  const ctaLabel = overview?.ctaLabel ?? "Launch Campaign";
+  const ctaDescription =
+    overview?.ctaDescription ??
+    "Broadcast emergency requests to all compatible donors within a 15km radius of the hospital.";
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -275,10 +307,10 @@ export default function DashboardOverview() {
            </div>
            <button
              onClick={handlePrimaryAction}
-             disabled={actionLoading}
+            disabled={donorPrimaryActionMutation.isPending}
              className="w-full bg-white text-rose-600 font-black py-4 rounded-2xl transition-all hover:bg-neutral-100 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
            >
-             {actionLoading ? "Processing..." : ctaLabel}
+            {donorPrimaryActionMutation.isPending ? "Processing..." : ctaLabel}
            </button>
         </div>
       </div>

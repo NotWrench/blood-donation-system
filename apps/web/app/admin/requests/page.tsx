@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { AlertCircle, Clock, CheckCircle, XCircle, Search, MapPin, Building2, TrendingUp, Plus, Loader2, Check, X } from "lucide-react";
-import Link from "next/link";
-import { StatusBadge, BloodBadge } from "../../dashboard/shared-components";
+import React from "react";
+import { AlertCircle, Clock, CheckCircle, Search, MapPin, Loader2, Check, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { StatusBadge } from "../../dashboard/shared-components";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 interface BloodRequest {
   id: number;
@@ -16,69 +18,68 @@ interface BloodRequest {
 }
 
 export default function AdminRequestsPage() {
-  const [requests, setRequests] = useState<BloodRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [processingId, setProcessingId] = useState<number | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState("all");
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('http://localhost:5000/api/requests');
-      if (!res.ok) throw new Error('Failed to fetch requests');
+  const queryClient = useQueryClient();
+
+  const requestsQuery = useQuery<BloodRequest[]>({
+    queryKey: ["requests", "all"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/requests`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch requests");
       const data = await res.json();
-      setRequests(data);
-      setError(null);
-    } catch (err: any) {
-      console.error('Fetch error:', err);
-      setError('Failed to connect to request database.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return Array.isArray(data) ? (data as BloodRequest[]) : [];
+    },
+    refetchInterval: 3_000,
+  });
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
-
-  const updateStatus = async (id: number, newStatus: string) => {
-    try {
-      setProcessingId(id);
-      setSuccessMessage(null);
-      setError(null);
-      
-      const res = await fetch(`http://localhost:5000/api/requests/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await fetch(`${API_BASE_URL}/api/requests/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to update status');
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to update status");
+      return data as BloodRequest;
+    },
+    onMutate: async ({ id, status }) => {
+      setSuccessMessage(null);
+      setError(null);
 
-      // Update UI instantly
-      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
-      
-      // Show success message
-      const message = newStatus === "approved" ? "Request Approved Successfully!" : "Request Rejected";
+      await queryClient.cancelQueries({ queryKey: ["requests", "all"] });
+      const previous = queryClient.getQueryData<BloodRequest[]>(["requests", "all"]);
+
+      queryClient.setQueryData<BloodRequest[]>(["requests", "all"], (current) =>
+        (current ?? []).map((r) => (r.id === id ? { ...r, status } : r))
+      );
+
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["requests", "all"], context.previous);
+      setError(err instanceof Error ? err.message : "Failed to update request status.");
+    },
+    onSuccess: async (_updated, vars) => {
+      const message = vars.status === "approved" ? "Request Approved Successfully!" : "Request Rejected";
       setSuccessMessage(message);
-      
-      // Clear success message after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000);
-    } catch (err: any) {
-      console.error('Update error:', err);
-      setError(err.message || 'Failed to update request status.');
-    } finally {
-      setProcessingId(null);
-    }
-  };
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["requests", "all"] }),
+        queryClient.invalidateQueries({ queryKey: ["donor", "availableRequests"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["requests", "recentActivity"] }),
+      ]);
+    },
+  });
+
+  const requests = requestsQuery.data ?? [];
 
   const filtered = requests
     .filter(r => {
@@ -90,10 +91,17 @@ export default function AdminRequestsPage() {
     })
     .sort((a, b) => {
       const priority: Record<string, number> = { critical: 3, high: 2, normal: 1, low: 0 };
-      return (priority[b.urgency] || 0) - (priority[a.urgency] || 0);
+      const statusPriority: Record<string, number> = { pending: 3, approved: 2, rejected: 1, fulfilled: 0 };
+      const statusDelta = (statusPriority[b.status] ?? 0) - (statusPriority[a.status] ?? 0);
+      if (statusDelta !== 0) return statusDelta;
+
+      const urgencyDelta = (priority[b.urgency] || 0) - (priority[a.urgency] || 0);
+      if (urgencyDelta !== 0) return urgencyDelta;
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
-  if (loading) {
+  if (requestsQuery.isLoading) {
     return (
       <div className="min-h-[400px] flex flex-col items-center justify-center text-center">
         <Loader2 className="w-12 h-12 text-rose-500 animate-spin mb-4" />
@@ -102,13 +110,14 @@ export default function AdminRequestsPage() {
     );
   }
 
-  if (error) {
+  if (requestsQuery.isError || error) {
+    const shownError = error || "Failed to connect to request database.";
     return (
       <div className="min-h-[400px] flex flex-col items-center justify-center text-center p-8 bg-rose-500/5 border border-rose-500/10 rounded-[2.5rem]">
         <AlertCircle className="w-12 h-12 text-rose-500 mb-4" />
         <h3 className="text-xl font-black text-white mb-2">Connection Error</h3>
-        <p className="text-neutral-400 mb-6 max-w-sm font-medium">{error}</p>
-        <button onClick={() => fetchRequests()} className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-2xl font-black transition-all shadow-xl shadow-rose-600/20 active:scale-95">Retry Sync</button>
+        <p className="text-neutral-400 mb-6 max-w-sm font-medium">{shownError}</p>
+        <button onClick={() => requestsQuery.refetch()} className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-2xl font-black transition-all shadow-xl shadow-rose-600/20 active:scale-95">Retry Sync</button>
       </div>
     );
   }
@@ -130,7 +139,7 @@ export default function AdminRequestsPage() {
       {/* Success Message */}
       {successMessage && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
-          <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-sm font-bold text-emerald-400">{successMessage}</span>
         </div>
       )}
@@ -138,7 +147,7 @@ export default function AdminRequestsPage() {
       {/* Error Message */}
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
-          <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
           <span className="text-sm font-bold text-rose-400">{error}</span>
         </div>
       )}
@@ -199,7 +208,7 @@ export default function AdminRequestsPage() {
 
                 {/* Location & Urgency */}
                 <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
+                  <MapPin className="w-4 h-4 text-neutral-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-white">{request.location}</p>
                     <p className="text-xs text-neutral-500 font-medium capitalize">{request.urgency} priority</p>
@@ -208,7 +217,7 @@ export default function AdminRequestsPage() {
 
                 {/* Created At */}
                 <div className="flex items-start gap-2">
-                  <Clock className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
+                  <Clock className="w-4 h-4 text-neutral-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-white">
                       {new Date(request.created_at).toLocaleDateString()}
@@ -229,11 +238,11 @@ export default function AdminRequestsPage() {
                   {request.status === "pending" ? (
                     <>
                       <button
-                        onClick={() => updateStatus(request.id, "approved")}
-                        disabled={processingId === request.id}
+                        onClick={() => updateStatusMutation.mutate({ id: request.id, status: "approved" })}
+                        disabled={updateStatusMutation.isPending}
                         className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/20 active:scale-95"
                       >
-                        {processingId === request.id ? (
+                        {updateStatusMutation.isPending ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <Check className="w-4 h-4" />
@@ -241,11 +250,11 @@ export default function AdminRequestsPage() {
                         <span className="hidden sm:inline">Approve</span>
                       </button>
                       <button
-                        onClick={() => updateStatus(request.id, "rejected")}
-                        disabled={processingId === request.id}
+                        onClick={() => updateStatusMutation.mutate({ id: request.id, status: "rejected" })}
+                        disabled={updateStatusMutation.isPending}
                         className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-rose-600/20 active:scale-95"
                       >
-                        {processingId === request.id ? (
+                        {updateStatusMutation.isPending ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <X className="w-4 h-4" />

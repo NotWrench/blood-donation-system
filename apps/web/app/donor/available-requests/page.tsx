@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Droplet, MapPin, Clock, AlertCircle, Loader2, Heart, CheckCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
@@ -28,107 +29,118 @@ const seededRequests: AvailableRequest[] = [
 ];
 
 export default function DonorAvailableRequestsPage() {
-  const [requests, setRequests] = React.useState<AvailableRequest[]>([]);
-  const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [processingId, setProcessingId] = React.useState<number | null>(null);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
   const normalizeBloodGroup = (value: string) => value.trim().toUpperCase().replaceAll(" ", "");
 
-  const fetchAvailableRequests = async () => {
-    try {
-      setLoading(true);
+  const queryClient = useQueryClient();
+
+  const donorBloodGroupQuery = useQuery({
+    queryKey: ["auth", "user", "blood_group"],
+    queryFn: async () => {
       const storedUser = localStorage.getItem("user");
       const parsedUser = storedUser ? JSON.parse(storedUser) : null;
       const donorBloodGroup: string = parsedUser?.blood_group ?? "";
       const normalizedDonorBloodGroup = donorBloodGroup ? normalizeBloodGroup(donorBloodGroup) : "";
 
       if (!normalizedDonorBloodGroup) {
-        setRequests([]);
-        setError("Your donor profile is missing a blood group. Update your profile to see compatible requests.");
-        return;
+        throw new Error("Your donor profile is missing a blood group. Update your profile to see compatible requests.");
       }
 
+      return normalizedDonorBloodGroup;
+    },
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+  const availableRequestsQuery = useQuery({
+    queryKey: ["donor", "availableRequests", donorBloodGroupQuery.data],
+    enabled: donorBloodGroupQuery.isSuccess,
+    queryFn: async () => {
       const url = new URL(`${API_BASE_URL}/api/donor/available-requests`);
-      url.searchParams.set("blood_group", normalizedDonorBloodGroup);
+      url.searchParams.set("blood_group", donorBloodGroupQuery.data ?? "");
 
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch available requests");
 
       const data = await res.json();
-      const incoming = Array.isArray(data) ? data : [];
-      const filtered = incoming.filter(
-        (req: AvailableRequest) => normalizeBloodGroup(req.blood_group) === normalizedDonorBloodGroup
-      );
+      const incoming: AvailableRequest[] = Array.isArray(data) ? data : [];
+      const donorGroup = donorBloodGroupQuery.data ?? "";
 
-      setRequests(filtered.length > 0 ? filtered : seededRequests.filter((r) => normalizeBloodGroup(r.blood_group) === normalizedDonorBloodGroup));
-      setError(null);
-    } catch (err: any) {
-      setError("Failed to load available requests. Showing sample data.");
-      const storedUser = localStorage.getItem("user");
-      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
-      const donorBloodGroup: string = parsedUser?.blood_group ?? "";
-      const normalizedDonorBloodGroup = donorBloodGroup ? normalizeBloodGroup(donorBloodGroup) : "";
-      setRequests(
-        normalizedDonorBloodGroup
-          ? seededRequests.filter((r) => normalizeBloodGroup(r.blood_group) === normalizedDonorBloodGroup)
-          : []
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+      const filtered = incoming.filter((req) => normalizeBloodGroup(req.blood_group) === donorGroup);
+      return filtered.length > 0
+        ? filtered
+        : seededRequests.filter((r) => normalizeBloodGroup(r.blood_group) === donorGroup);
+    },
+    refetchInterval: 3_000,
+  });
 
   React.useEffect(() => {
-    fetchAvailableRequests();
-  }, []);
+    if (donorBloodGroupQuery.isError) {
+      setError(donorBloodGroupQuery.error instanceof Error ? donorBloodGroupQuery.error.message : "Missing blood group.");
+    }
+  }, [donorBloodGroupQuery.isError, donorBloodGroupQuery.error]);
 
-  const handleAcceptRequest = async (requestId: number) => {
-    try {
-      setProcessingId(requestId);
-      setSuccessMessage(null);
-      setError(null);
+  React.useEffect(() => {
+    if (availableRequestsQuery.isError) {
+      setError("Failed to load available requests. Showing sample data.");
+    }
+  }, [availableRequestsQuery.isError]);
 
+  const acceptRequestMutation = useMutation({
+    mutationFn: async (requestId: number) => {
       const storedUser = localStorage.getItem("user");
       const parsed = storedUser ? JSON.parse(storedUser) : null;
       const email = parsed?.email;
-      const userId = parsed?.id;
 
-      if (!email || !userId) {
-        throw new Error("Please log in to accept requests");
-      }
+      if (!email) throw new Error("Please log in to accept requests");
 
       const res = await fetch(`${API_BASE_URL}/api/donor/accept-request/${requestId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, userId }),
+        body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
-      
-      if (!res.ok) {
-        // Show the specific error message from the backend
-        throw new Error(data?.message || "Failed to accept request");
+      if (!res.ok) throw new Error(data?.message || "Failed to accept request");
+      return data;
+    },
+    onMutate: async (requestId) => {
+      setSuccessMessage(null);
+      setError(null);
+
+      const donorGroup = donorBloodGroupQuery.data;
+      await queryClient.cancelQueries({ queryKey: ["donor", "availableRequests", donorGroup] });
+
+      const previous = queryClient.getQueryData<AvailableRequest[]>(["donor", "availableRequests", donorGroup]);
+      queryClient.setQueryData<AvailableRequest[]>(
+        ["donor", "availableRequests", donorGroup],
+        (current) => (current ?? []).filter((r) => r.id !== requestId)
+      );
+
+      return { previous };
+    },
+    onError: (err, _requestId, context) => {
+      if (context?.previous && donorBloodGroupQuery.data) {
+        queryClient.setQueryData(["donor", "availableRequests", donorBloodGroupQuery.data], context.previous);
       }
 
-      // Remove the accepted request from the list
-      setRequests((prev) => prev.filter((req) => req.id !== requestId));
-      setSuccessMessage("Donation Successful! Thank you for saving lives.");
-
-      // Clear success message after 5 seconds
-      setTimeout(() => setSuccessMessage(null), 5000);
-    } catch (err: any) {
-      console.error("Accept error:", err);
-      // Display the actual error message instead of generic "Connection Error"
-      setError(err.message || "Failed to accept request. Please try again.");
-      
-      // Clear error message after 8 seconds
+      setError(err instanceof Error ? err.message : "Failed to accept request. Please try again.");
       setTimeout(() => setError(null), 8000);
-    } finally {
-      setProcessingId(null);
-    }
-  };
+    },
+    onSuccess: async () => {
+      setSuccessMessage("Donation Successful! Thank you for saving lives.");
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["donor", "availableRequests"] }),
+        queryClient.invalidateQueries({ queryKey: ["donor", "history"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory", "lowStockAlerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["requests", "recentActivity"] }),
+      ]);
+    },
+  });
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency.toLowerCase()) {
@@ -144,7 +156,7 @@ export default function DonorAvailableRequestsPage() {
     }
   };
 
-  if (loading) {
+  if (donorBloodGroupQuery.isLoading || availableRequestsQuery.isLoading) {
     return (
       <div className="min-h-[400px] flex flex-col items-center justify-center text-center">
         <Loader2 className="w-12 h-12 text-rose-500 animate-spin mb-4" />
@@ -152,6 +164,8 @@ export default function DonorAvailableRequestsPage() {
       </div>
     );
   }
+
+  const requests = availableRequestsQuery.data ?? [];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-right-3 duration-700">
@@ -242,11 +256,11 @@ export default function DonorAvailableRequestsPage() {
                 {/* Accept Button */}
                 <div className="flex justify-end">
                   <button
-                    onClick={() => handleAcceptRequest(request.id)}
-                    disabled={processingId === request.id}
+                    onClick={() => acceptRequestMutation.mutate(request.id)}
+                    disabled={acceptRequestMutation.isPending}
                     className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-rose-600/20 active:scale-95"
                   >
-                    {processingId === request.id ? (
+                    {acceptRequestMutation.isPending ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="hidden sm:inline">Processing...</span>

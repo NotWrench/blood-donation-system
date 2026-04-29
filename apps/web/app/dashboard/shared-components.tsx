@@ -4,6 +4,7 @@ import React from "react";
 import {
   Droplet, TrendingUp, TrendingDown,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
@@ -82,21 +83,17 @@ export function StatCard({
   );
 }
 export function LowStockAlert() {
-  const [alerts, setAlerts] = React.useState<{ blood_group: string; units: number }[]>([]);
+  const lowStockQuery = useQuery({
+    queryKey: ["inventory", "lowStockAlerts"],
+    queryFn: async () => {
+      const data = await fetchJsonWithTimeout(`${API_BASE_URL}/api/inventory`);
+      if (!Array.isArray(data)) return [];
 
-  React.useEffect(() => {
-    const checkStock = async () => {
-      try {
-        const data = await fetchJsonWithTimeout(`${API_BASE_URL}/api/inventory`);
-        if (Array.isArray(data)) {
-          setAlerts(data.filter((item: any) => item.units < 10));
-        }
-      } catch (err) {
-        console.error("Alert check failed", err);
-      }
-    };
-    checkStock();
-  }, []);
+      return (data as Array<{ blood_group: string; units: number }>).filter((item) => item.units < 10);
+    },
+  });
+
+  const alerts = lowStockQuery.data ?? [];
 
   if (alerts.length === 0) return null;
 
@@ -120,35 +117,37 @@ export function LowStockAlert() {
   );
 }
 export function RecentActivity() {
-  const [activities, setActivities] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const recentActivityQuery = useQuery({
+    queryKey: ["requests", "recentActivity"],
+    queryFn: async () => {
+      const data = await fetchJsonWithTimeout(`${API_BASE_URL}/api/requests`);
+      if (!Array.isArray(data)) return [];
 
-  React.useEffect(() => {
-    const fetchRecent = async () => {
-      try {
-        const data = await fetchJsonWithTimeout(`${API_BASE_URL}/api/requests`);
-        // Sort by date and take top 5
-        setActivities(data.sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ).slice(0, 5));
-      } catch (err) {
-        console.error("Activity fetch failed", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRecent();
-  }, []);
+      return (data as Array<{ id: number | string; blood_group: string; location: string; created_at: string; status: string }>)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5);
+    },
+  });
 
-  if (loading) return <div className="animate-pulse space-y-4">
-    {[1,2,3].map(i => <div key={i} className="h-16 bg-neutral-800/50 rounded-2xl w-full" />)}
-  </div>;
+  if (recentActivityQuery.isLoading) {
+    return (
+      <div className="animate-pulse space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-16 bg-neutral-800/50 rounded-2xl w-full" />
+        ))}
+      </div>
+    );
+  }
 
-  if (activities.length === 0) return (
+  const activities = recentActivityQuery.data ?? [];
+
+  if (activities.length === 0) {
+    return (
     <div className="py-10 text-center opacity-20">
       <p className="text-xs font-black uppercase tracking-widest">No recent activity</p>
     </div>
   );
+  }
 
   return (
     <div className="space-y-4">
