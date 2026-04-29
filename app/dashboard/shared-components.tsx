@@ -5,6 +5,24 @@ import {
   Droplet, TrendingUp, TrendingDown,
 } from "lucide-react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
+async function fetchJsonWithTimeout(url: string, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     available:   "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
@@ -69,9 +87,7 @@ export function LowStockAlert() {
   React.useEffect(() => {
     const checkStock = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/inventory');
-        if (!res || !res.ok) return;
-        const data = await res.json();
+        const data = await fetchJsonWithTimeout(`${API_BASE_URL}/api/inventory`);
         if (Array.isArray(data)) {
           setAlerts(data.filter((item: any) => item.units < 10));
         }
@@ -110,9 +126,7 @@ export function RecentActivity() {
   React.useEffect(() => {
     const fetchRecent = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/requests');
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await fetchJsonWithTimeout(`${API_BASE_URL}/api/requests`);
         // Sort by date and take top 5
         setActivities(data.sort((a: any, b: any) => 
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()

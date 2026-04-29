@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
-  Heart, Mail, Lock, User, MapPin, Droplet, ArrowRight, Eye, EyeOff, Loader2, CheckCircle, AlertCircle 
+  Heart, Mail, Lock, User, MapPin, Droplet, ArrowRight, Eye, EyeOff, Loader2, CheckCircle, AlertCircle, Shield
 } from "lucide-react";
 
 export default function RegisterPage() {
@@ -21,6 +21,7 @@ export default function RegisterPage() {
     email: "",
     bloodGroup: "",
     location: "",
+    role: "",
     password: "",
   });
   const [errors, setErrors] = useState({
@@ -81,7 +82,8 @@ export default function RegisterPage() {
           email: formData.email,
           password: formData.password,
           blood_group: formData.bloodGroup,
-          location: formData.location
+          location: formData.location,
+          role: formData.role || "donor",
         }),
       });
 
@@ -150,7 +152,6 @@ export default function RegisterPage() {
                   className={`w-full bg-neutral-950 border rounded-2xl pl-14 pr-5 py-4 text-white outline-none transition-all font-bold placeholder:text-neutral-700 hover:border-neutral-700 ${
                     errors.name ? "border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]" : "border-neutral-800 focus:border-rose-500"
                   }`}
-                  noValidate
                 />
               </div>
               {errors.name && <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1 animate-in slide-in-from-top-1">{errors.name}</p>}
@@ -172,7 +173,6 @@ export default function RegisterPage() {
                   className={`w-full bg-neutral-950 border rounded-2xl pl-14 pr-5 py-4 text-white outline-none transition-all font-bold placeholder:text-neutral-700 hover:border-neutral-700 ${
                     errors.email ? "border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]" : "border-neutral-800 focus:border-rose-500"
                   }`}
-                  noValidate
                 />
               </div>
               {errors.email && <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1 animate-in slide-in-from-top-1">{errors.email}</p>}
@@ -216,10 +216,30 @@ export default function RegisterPage() {
                   className={`w-full bg-neutral-950 border rounded-2xl pl-14 pr-5 py-4 text-white outline-none transition-all font-bold placeholder:text-neutral-700 hover:border-neutral-700 ${
                     errors.location ? "border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]" : "border-neutral-800 focus:border-rose-500"
                   }`}
-                  noValidate
                 />
               </div>
               {errors.location && <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1 animate-in slide-in-from-top-1">{errors.location}</p>}
+            </div>
+
+            {/* Role */}
+            <div className="space-y-2 lg:col-span-1">
+              <label className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.2em] ml-1">Role</label>
+              <div className="relative group">
+                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-rose-500 transition-colors pointer-events-none">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-2xl pl-14 pr-5 py-4 text-white outline-none transition-all font-bold appearance-none cursor-pointer hover:border-neutral-700 focus:border-rose-500"
+                >
+                  <option value="">Donor (Default)</option>
+                  <option value="donor">Donor</option>
+                  <option value="hospital">Hospital</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
             </div>
 
             {/* Password Field */}
@@ -238,7 +258,6 @@ export default function RegisterPage() {
                   className={`w-full bg-neutral-950 border rounded-2xl pl-14 pr-14 py-4 text-white outline-none transition-all font-bold placeholder:text-neutral-700 hover:border-neutral-700 ${
                     errors.password ? "border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]" : "border-neutral-800 focus:border-rose-500"
                   }`}
-                  noValidate
                 />
                 <button 
                   type="button"

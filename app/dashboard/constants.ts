@@ -13,18 +13,19 @@ import {
 export type UserRole = "admin" | "donor" | "hospital";
 export type Section = 
   | "dashboard" | "donors" | "requests" | "inventory" | "hospitals" | "analytics"
-  | "my-donations" | "profile" | "post-request" | "my-requests";
+  | "my-donations" | "profile" | "post-request" | "my-requests" | "available-requests";
 
 // ─── Nav Config ──────────────────────────────────────────────────────────────
 export const navItems: { id: Section; label: string; path: string; icon: React.ElementType; roles: UserRole[] }[] = [
   { id: "dashboard",    label: "Dashboard",     path: "/dashboard",           icon: LayoutDashboard, roles: ["admin", "donor", "hospital"] },
   { id: "donors",       label: "Donors List",   path: "/dashboard/donors",    icon: Users,           roles: ["admin"] },
-  { id: "requests",     label: "All Requests",  path: "/dashboard/requests",  icon: FileText,        roles: ["admin"] },
+  { id: "requests",     label: "Approve Requests",  path: "/admin/requests",  icon: FileText,        roles: ["admin"] },
   { id: "inventory",    label: "Blood Stock",   path: "/dashboard/inventory", icon: Package,         roles: ["admin"] },
   { id: "hospitals",    label: "Hospitals",     path: "/dashboard/hospitals", icon: Building2,       roles: ["admin"] },
   { id: "analytics",    label: "Analytics",     path: "/dashboard/analytics", icon: BarChart3,       roles: ["admin"] },
   
   // Donor specific
+  { id: "available-requests", label: "Available Requests", path: "/donor/available-requests", icon: Droplet, roles: ["donor"] },
   { id: "my-donations", label: "My History",    path: "/dashboard/my-donations", icon: History,         roles: ["donor"] },
   { id: "profile",      label: "My Profile",    path: "/dashboard/profile",      icon: Heart,           roles: ["donor"] },
 

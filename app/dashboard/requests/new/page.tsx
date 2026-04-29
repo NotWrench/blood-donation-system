@@ -12,7 +12,8 @@ import {
   CheckCircle, 
   AlertCircle,
   Syringe,
-  Info
+  Info,
+  Clock
 } from "lucide-react";
 
 export default function NewRequestPage() {
@@ -27,6 +28,15 @@ export default function NewRequestPage() {
     location: "",
     urgency: "normal",
   });
+
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+
+    router.push("/dashboard/requests");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +57,7 @@ export default function NewRequestPage() {
       }
 
       setSuccess(true);
-      setFormData({ blood_group: "O+", units: 1, location: "" }); // Reset form
+      setFormData({ blood_group: "O+", units: 1, location: "", urgency: "normal" }); // Reset form
       
       // Redirect back after a short delay
       setTimeout(() => {
@@ -72,13 +82,14 @@ export default function NewRequestPage() {
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
-      <Link 
-        href="/dashboard/requests" 
+      <button
+        type="button"
+        onClick={handleGoBack}
         className="inline-flex items-center gap-2 text-neutral-500 hover:text-rose-500 transition-colors mb-8 font-bold text-sm group"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
         Back to Requests
-      </Link>
+      </button>
 
       <div className="bg-neutral-900 border border-neutral-800 rounded-[2.5rem] overflow-hidden shadow-2xl relative">
         {/* Success Overlay */}

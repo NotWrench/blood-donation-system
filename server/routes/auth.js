@@ -3,10 +3,20 @@ const router = express.Router();
 const pool = require("../db");
 const bcrypt = require("bcrypt");
 
+const VALID_ROLES = new Set(["donor", "hospital", "admin"]);
+
 // ================= REGISTER =================
 router.post("/register", async (req, res) => {
     try {
-        const { name, email, password, blood_group, location } = req.body;
+        const { name, email, password, blood_group, location, role } = req.body;
+
+        const normalizedRole = typeof role === "string" && role.trim()
+            ? role.trim().toLowerCase()
+            : "donor";
+
+        if (!VALID_ROLES.has(normalizedRole)) {
+            return res.status(400).json({ message: "Invalid role selected" });
+        }
 
         // 1. Normalize email
         const normalizedEmail = email.trim().toLowerCase();
@@ -26,10 +36,10 @@ router.post("/register", async (req, res) => {
 
         // 4. insert user
         const newUser = await pool.query(
-            `INSERT INTO users (name, email, password, blood_group, location)
-       VALUES ($1, $2, $3, $4, $5)
+              `INSERT INTO users (name, email, password, role, blood_group, location)
+          VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, email, role, blood_group, location`,
-            [name, normalizedEmail, hashedPassword, blood_group, location]
+              [name, normalizedEmail, hashedPassword, normalizedRole, blood_group, location]
         );
 
         console.log(`[AUTH] User registered: ${normalizedEmail}`);
@@ -80,8 +90,9 @@ router.post("/login", async (req, res) => {
         // 4. Success
         console.log(`[AUTH SUCCESS] User logged in: ${normalizedEmail}`);
         
-        // Remove password before sending back
+        // Remove password before sending back and normalize role for old records.
         const { password: _, ...userWithoutPassword } = user;
+        userWithoutPassword.role = userWithoutPassword.role || "donor";
 
         res.json({
             message: "Login successful",
@@ -94,4 +105,4 @@ router.post("/login", async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = router;

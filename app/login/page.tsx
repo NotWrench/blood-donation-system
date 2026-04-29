@@ -9,6 +9,11 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const roleDashboardMap: Record<string, string> = {
+    donor: "/donor/dashboard",
+    hospital: "/hospital/dashboard",
+    admin: "/admin/dashboard",
+  };
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | null }>({
@@ -64,15 +69,21 @@ export default function LoginPage() {
         setToast({ message: data.message || "Invalid credentials", type: "error" });
         return;
       }
+
+      const resolvedRole = (data?.user?.role || "donor").toLowerCase();
+      const normalizedUser = {
+        ...data.user,
+        role: roleDashboardMap[resolvedRole] ? resolvedRole : "donor",
+      };
       
       // Store real login state
       localStorage.setItem("isLoggedIn", "true");
-      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("user", JSON.stringify(normalizedUser));
       
       setToast({ message: "Login successful! Redirecting...", type: "success" });
       
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push(roleDashboardMap[normalizedUser.role] || "/donor/dashboard");
       }, 1000);
 
     } catch (err) {
@@ -127,7 +138,6 @@ export default function LoginPage() {
                   className={`w-full bg-neutral-950 border rounded-2xl pl-14 pr-5 py-4 text-white outline-none transition-all font-bold placeholder:text-neutral-700 hover:border-neutral-700 ${
                     errors.email ? "border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]" : "border-neutral-800 focus:border-rose-500"
                   }`}
-                  noValidate
                 />
               </div>
               {errors.email && <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1 animate-in slide-in-from-top-1">{errors.email}</p>}

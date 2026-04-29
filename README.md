@@ -1,36 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Blood Donation Management System
 
-## Getting Started
+A comprehensive web application that connects hospitals needing blood with donors who can provide it, with an admin approval layer for safety and authenticity.
 
-First, run the development server:
+## 🎯 Project Overview
 
+This system enables:
+- **Hospitals** to create blood requests
+- **Admins** to review and approve/reject requests
+- **Donors** to view approved requests and accept them
+- Real-time inventory management
+- Role-based access control
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js (v16 or higher)
+- PostgreSQL (v12 or higher)
+- npm or yarn
+
+### Installation
+
+1. **Clone the repository**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd blood-donation-system
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. **Install dependencies**
+```bash
+# Install frontend dependencies
+npm install
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+# Install backend dependencies
+cd server
+npm install
+cd ..
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. **Setup Database**
+```bash
+# Create database
+createdb blood_donation
 
-## Learn More
+# Run schema
+cd server
+psql -U postgres -d blood_donation -f reset_db.sql
 
-To learn more about Next.js, take a look at the following resources:
+# Seed demo data
+node seed_demo.js
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. **Start the application**
+```bash
+# Terminal 1: Start Backend (from server folder)
+cd server
+node index.js
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Terminal 2: Start Frontend (from root folder)
+npm run dev
+```
 
-## Deploy on Vercel
+5. **Access the application**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Test Users
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+After seeding the database:
+
+| Role     | Email                        | Password    |
+|----------|------------------------------|-------------|
+| Donor    | rahul@example.com            | password123 |
+| Hospital | cityhospital@example.com     | password123 |
+| Admin    | admin@lifedrops.com          | admin123    |
+
+## 📚 Documentation
+
+All project documentation is organized in the [`docs/`](docs/) folder:
+
+- **[Quick Start Guide](docs/QUICK_SETUP_AFTER_FIX.md)** - Detailed setup instructions
+- **[Viva Presentation Guide](docs/VIVA_PRESENTATION_GUIDE.md)** - Complete guide for demo/presentation
+- **[System Architecture](docs/SYSTEM_ARCHITECTURE.md)** - Architecture overview
+- **[Final Project Status](docs/FINAL_PROJECT_STATUS.md)** - Current status and features
+- **[Documentation Index](docs/INDEX.md)** - Complete documentation index
+
+## 🏗️ Technology Stack
+
+**Frontend:**
+- Next.js 16 (React framework)
+- TypeScript
+- Tailwind CSS
+- Lucide React (icons)
+
+**Backend:**
+- Node.js + Express.js
+- PostgreSQL
+- bcrypt (password hashing)
+
+## ✨ Key Features
+
+- ✅ User authentication with role-based access
+- ✅ Hospital blood request creation
+- ✅ Admin approval/rejection system
+- ✅ Donor request acceptance
+- ✅ Real-time inventory management
+- ✅ Donation history tracking
+- ✅ Responsive dark theme UI
+- ✅ Transaction-safe database operations
+
+## 📖 Learn More About Next.js
+
+This project is built with Next.js. To learn more:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial
+- [Next.js GitHub repository](https://github.com/vercel/next.js)
+
+## 🚀 Deployment
+
+For deployment instructions, see [DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md).
+
+The easiest way to deploy the Next.js frontend is using the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
+
+## 📝 License
+
+This project is for educational purposes.
+
+## 🤝 Contributing
+
+This is an educational project. For questions or suggestions, please refer to the documentation in the `docs/` folder.
+
+---
+
+**For detailed documentation, guides, and troubleshooting, see the [`docs/`](docs/) folder.**

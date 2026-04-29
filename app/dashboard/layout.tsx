@@ -16,34 +16,85 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [role, setRole] = useState<UserRole>("admin");
+  const [role, setRole] = useState<UserRole>("donor");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const pathname = usePathname();
+  const [authChecked, setAuthChecked] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const notificationMenuRef = React.useRef<HTMLDivElement | null>(null);
 
   const [userData, setUserData] = useState<any>(null);
+
+  const dummyNotifications = React.useMemo(
+    () => [
+      { id: 1, title: "Critical O- request", detail: "City Hospital posted 2 units request", time: "2m ago" },
+      { id: 2, title: "Request approved", detail: "Your latest request was approved", time: "18m ago" },
+      { id: 3, title: "Inventory updated", detail: "A+ stock was replenished", time: "1h ago" },
+    ],
+    []
+  );
 
   React.useEffect(() => {
     const loggedIn = localStorage.getItem("isLoggedIn");
     const storedUser = localStorage.getItem("user");
     
     if (loggedIn !== "true" || !storedUser) {
+      setIsAuthorized(false);
+      setAuthChecked(true);
       router.push("/login");
     } else {
-      setUserData(JSON.parse(storedUser));
-      setIsAuthorized(true);
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        const storedRole = (parsedUser?.role || "donor").toLowerCase();
+        const normalizedRole: UserRole = storedRole === "admin" || storedRole === "hospital" ? storedRole : "donor";
+        parsedUser.role = normalizedRole;
+        setRole(normalizedRole);
+        setUserData(parsedUser);
+        setIsAuthorized(true);
+        setAuthChecked(true);
+      } catch {
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("user");
+        setIsAuthorized(false);
+        setAuthChecked(true);
+        router.push("/login");
+      }
     }
-  }, [router]);
+  }, []);
 
   const handleSignOut = () => {
     localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("user");
     localStorage.removeItem("userEmail");
+    setIsAuthorized(false);
     router.push("/login");
   };
 
+  const handleProfileNavigate = () => {
+    const routeByRole: Record<UserRole, string> = {
+      donor: "/donor/profile",
+      hospital: "/hospital/profile",
+      admin: "/admin/profile",
+    };
+
+    router.push(routeByRole[role]);
+  };
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const currentNav = navItems.filter(item => item.roles.includes(role));
 
-  if (!isAuthorized) {
+  if (!authChecked || !isAuthorized) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
@@ -51,32 +102,22 @@ export default function DashboardLayout({
     );
   }
 
-  const roleLabels: Record<UserRole, { name: string, title: string, color: string }> = {
-    admin:    { name: "Dr. Nishita", title: "Central Admin", color: "text-rose-500" },
-    donor:    { name: "Aryan Sharma", title: "Universal Donor", color: "text-emerald-500" },
-    hospital: { name: "City Hospital", title: "Medical Hub", color: "text-blue-500" },
+  const roleLabels: Record<UserRole, { title: string, color: string }> = {
+    admin:    { title: "Central Admin", color: "text-rose-500" },
+    donor:    { title: "Universal Donor", color: "text-emerald-500" },
+    hospital: { title: "Medical Hub", color: "text-blue-500" },
   };
+
+  // Get user name from userData, fallback to role-based default
+  const getUserName = () => {
+    if (userData?.name) return userData.name;
+    return role === 'admin' ? 'Admin' : role === 'hospital' ? 'Hospital' : 'Donor';
+  };
+
+  const userName = getUserName();
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex font-sans selection:bg-rose-500/30">
-      
-      {/* Role Switcher (For Demo Only) */}
-      <div className="fixed bottom-6 right-6 z-[60] flex flex-col gap-2">
-        <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest text-right px-2">Role Preview</p>
-        <div className="bg-neutral-900/80 backdrop-blur-xl border border-neutral-800 p-2 rounded-2xl flex gap-1 shadow-2xl">
-          {(["admin", "donor", "hospital"] as UserRole[]).map(r => (
-            <button 
-              key={r} 
-              onClick={() => setRole(r)}
-              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                role === r ? "bg-rose-600 text-white" : "text-neutral-500 hover:text-white"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* ── Sidebar ── */}
       {sidebarOpen && (
@@ -163,7 +204,7 @@ export default function DashboardLayout({
                 {role} Mode
               </span>
             </div>
-            <p className="text-xs font-bold text-neutral-500 mt-0.5 hidden sm:block">Hello {roleLabels[role].name}, welcome to your terminal.</p>
+            <p className="text-xs font-bold text-neutral-500 mt-0.5 hidden sm:block">Hello {userName}, welcome to your terminal.</p>
           </div>
 
           {role === 'admin' && (
@@ -182,20 +223,50 @@ export default function DashboardLayout({
               <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
             </button>
 
-            <button className="relative p-3 rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-700 transition-all group">
-              <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-rose-500 rounded-full border-[3px] border-neutral-950 animate-bounce"></span>
-            </button>
+            <div ref={notificationMenuRef} className="relative">
+              <button
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+                className="relative p-3 rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-700 transition-all group"
+                aria-label="Open notifications"
+              >
+                <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-rose-500 rounded-full border-[3px] border-neutral-950 animate-bounce"></span>
+              </button>
 
-            <div className="hidden sm:flex items-center gap-3 pl-4 border-l border-neutral-800 group cursor-pointer">
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-3 w-80 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-neutral-800">
+                    <p className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.2em]">Notifications</p>
+                  </div>
+                  <div className="max-h-80 overflow-auto">
+                    {dummyNotifications.map((item) => (
+                      <button
+                        key={item.id}
+                        className="w-full text-left px-4 py-3 border-b border-neutral-800/60 last:border-b-0 hover:bg-neutral-800/60 transition-colors"
+                      >
+                        <p className="text-sm font-black text-white">{item.title}</p>
+                        <p className="text-xs font-medium text-neutral-400 mt-0.5">{item.detail}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mt-2">{item.time}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleProfileNavigate}
+              className="hidden sm:flex items-center gap-3 pl-4 border-l border-neutral-800 group cursor-pointer"
+              title="Open profile"
+            >
               <div className="text-right">
-                <p className="text-sm font-black text-white leading-none mb-1 group-hover:text-rose-500 transition-colors">{roleLabels[role].name}</p>
+                <p className="text-sm font-black text-white leading-none mb-1 group-hover:text-rose-500 transition-colors">{userName}</p>
                 <p className={`text-[10px] uppercase font-black tracking-tighter ${roleLabels[role].color}`}>{roleLabels[role].title}</p>
               </div>
               <div className="w-10 h-10 bg-neutral-800 rounded-2xl flex items-center justify-center border border-neutral-700 group-hover:border-rose-500 transition-all">
                 <Users className="w-5 h-5 text-neutral-500 group-hover:text-rose-500" />
               </div>
-            </div>
+            </button>
           </div>
         </header>
 

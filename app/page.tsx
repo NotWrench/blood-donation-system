@@ -482,7 +482,7 @@ function FeatureCard({ icon, title, description, color = 'rose' }: {
       <div className="relative z-10">
         {/* Icon */}
         <div className={`w-12 h-12 ${c.bg} ${c.text} rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-          {React.cloneElement(icon as React.ReactElement, { className: 'w-6 h-6' })}
+          {React.cloneElement(icon as React.ReactElement<any>, { className: 'w-6 h-6' })}
         </div>
         {/* Title */}
         <h3 className="text-lg font-semibold text-neutral-900 mb-2">{title}</h3>
@@ -522,7 +522,7 @@ function StepCard({
       </div>
       {/* Icon */}
       <div className={`w-10 h-10 ${c.iconBg} ${c.iconText} rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-        {React.cloneElement(icon as React.ReactElement, { className: 'w-5 h-5' })}
+        {React.cloneElement(icon as React.ReactElement<any>, { className: 'w-5 h-5' })}
       </div>
       {/* Text */}
       <h3 className="text-base font-semibold text-neutral-900 mb-2">{title}</h3>
