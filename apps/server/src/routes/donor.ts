@@ -103,12 +103,21 @@ router.get("/history", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/available-requests", async (_req: Request, res: Response) => {
+router.get("/available-requests", async (req: Request, res: Response) => {
   try {
+    const bloodGroupRaw = (req.query?.blood_group ?? "").toString().trim();
+
     // Fetch all approved requests (approved by admin) that are pending donor acceptance
-    const result = await pg.query(
-      "SELECT id, blood_group, units, location, status, urgency, created_at FROM requests WHERE status = 'approved' ORDER BY urgency DESC, created_at DESC LIMIT 50"
-    );
+    const query = `
+      SELECT id, blood_group, units, location, status, urgency, created_at
+      FROM requests
+      WHERE status = 'approved'
+      ${bloodGroupRaw ? "AND blood_group = $1" : ""}
+      ORDER BY urgency DESC, created_at DESC
+      LIMIT 50
+    `;
+
+    const result = bloodGroupRaw ? await pg.query(query, [bloodGroupRaw]) : await pg.query(query);
 
     if (result.rows.length === 0) {
       return res.status(200).json([

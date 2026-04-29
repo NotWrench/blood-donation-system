@@ -34,19 +34,47 @@ export default function DonorAvailableRequestsPage() {
   const [processingId, setProcessingId] = React.useState<number | null>(null);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
+  const normalizeBloodGroup = (value: string) => value.trim().toUpperCase().replaceAll(" ", "");
+
   const fetchAvailableRequests = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/donor/available-requests`, { cache: "no-store" });
+      const storedUser = localStorage.getItem("user");
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+      const donorBloodGroup: string = parsedUser?.blood_group ?? "";
+      const normalizedDonorBloodGroup = donorBloodGroup ? normalizeBloodGroup(donorBloodGroup) : "";
+
+      if (!normalizedDonorBloodGroup) {
+        setRequests([]);
+        setError("Your donor profile is missing a blood group. Update your profile to see compatible requests.");
+        return;
+      }
+
+      const url = new URL(`${API_BASE_URL}/api/donor/available-requests`);
+      url.searchParams.set("blood_group", normalizedDonorBloodGroup);
+
+      const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch available requests");
 
       const data = await res.json();
-      setRequests(Array.isArray(data) && data.length > 0 ? data : seededRequests);
+      const incoming = Array.isArray(data) ? data : [];
+      const filtered = incoming.filter(
+        (req: AvailableRequest) => normalizeBloodGroup(req.blood_group) === normalizedDonorBloodGroup
+      );
+
+      setRequests(filtered.length > 0 ? filtered : seededRequests.filter((r) => normalizeBloodGroup(r.blood_group) === normalizedDonorBloodGroup));
       setError(null);
     } catch (err: any) {
-      console.error("Fetch error:", err);
       setError("Failed to load available requests. Showing sample data.");
-      setRequests(seededRequests);
+      const storedUser = localStorage.getItem("user");
+      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+      const donorBloodGroup: string = parsedUser?.blood_group ?? "";
+      const normalizedDonorBloodGroup = donorBloodGroup ? normalizeBloodGroup(donorBloodGroup) : "";
+      setRequests(
+        normalizedDonorBloodGroup
+          ? seededRequests.filter((r) => normalizeBloodGroup(r.blood_group) === normalizedDonorBloodGroup)
+          : []
+      );
     } finally {
       setLoading(false);
     }
@@ -142,7 +170,7 @@ export default function DonorAvailableRequestsPage() {
       {/* Success Message */}
       {successMessage && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
-          <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
           <p className="text-sm font-bold text-emerald-400">{successMessage}</p>
         </div>
       )}
@@ -150,7 +178,7 @@ export default function DonorAvailableRequestsPage() {
       {/* Error Message */}
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
-          <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
           <p className="text-sm font-bold text-rose-400">{error}</p>
         </div>
       )}
@@ -183,7 +211,7 @@ export default function DonorAvailableRequestsPage() {
 
                 {/* Location */}
                 <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
+                  <MapPin className="w-4 h-4 text-neutral-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-white">{request.location}</p>
                     <p className="text-xs text-neutral-500 font-medium">Hospital location</p>
@@ -192,7 +220,7 @@ export default function DonorAvailableRequestsPage() {
 
                 {/* Created Date */}
                 <div className="flex items-start gap-2">
-                  <Clock className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
+                  <Clock className="w-4 h-4 text-neutral-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-white">
                       {new Date(request.created_at).toLocaleDateString()}
@@ -241,7 +269,7 @@ export default function DonorAvailableRequestsPage() {
       {/* Info Box */}
       <div className="bg-blue-500/10 border border-blue-500/20 p-6 rounded-2xl">
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
           <div>
             <h3 className="text-sm font-black text-blue-400 mb-2 uppercase tracking-widest">Important Information</h3>
             <ul className="text-xs text-blue-300/80 space-y-1 font-medium">
