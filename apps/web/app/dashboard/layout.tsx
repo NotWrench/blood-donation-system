@@ -215,14 +215,6 @@ export default function DashboardLayout({
           )}
 
           <div className="flex items-center gap-4">
-            <button 
-              onClick={handleSignOut}
-              className="hidden sm:flex items-center gap-2 p-3 rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-500 hover:text-rose-500 hover:border-rose-500/20 transition-all group"
-              title="Sign Out"
-            >
-              <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            </button>
-
             <div ref={notificationMenuRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen((prev) => !prev)}
