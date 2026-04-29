@@ -1,135 +1,94 @@
 # Blood Donation Management System
 
-A comprehensive web application that connects hospitals needing blood with donors who can provide it, with an admin approval layer for safety and authenticity.
+A Next.js + Express/Postgres app for connecting hospitals that need blood with donors who can help, with role-specific donor, hospital, and admin flows.
 
-## 🎯 Project Overview
+## Workspace
 
-This system enables:
-- **Hospitals** to create blood requests
-- **Admins** to review and approve/reject requests
-- **Donors** to view approved requests and accept them
-- Real-time inventory management
-- Role-based access control
+This repo uses Bun workspaces and Turborepo.
 
-## 🚀 Quick Start
+- `apps/web` - Next.js App Router frontend
+- `apps/server` - TypeScript Express API
+- `docker-compose.yml` - local Postgres database
 
-### Prerequisites
-- Node.js (v16 or higher)
-- PostgreSQL (v12 or higher)
-- npm or yarn
+## Prerequisites
 
-### Installation
+- Bun 1.3.x
+- Docker Desktop, or a local PostgreSQL 15+ instance
 
-1. **Clone the repository**
+## Quick Start
+
+Install dependencies from the repo root:
+
 ```bash
-git clone <repository-url>
-cd blood-donation-system
+bun install
 ```
 
-2. **Install dependencies**
-```bash
-# Install frontend dependencies
-npm install
+Start Postgres:
 
-# Install backend dependencies
-cd server
-npm install
-cd ..
+```bash
+docker compose up -d db
 ```
 
-3. **Setup Database**
+Reset and seed the database:
+
 ```bash
-# Create database
-createdb blood_donation
-
-# Run schema
-cd server
-psql -U postgres -d blood_donation -f reset_db.sql
-
-# Seed demo data
-node seed_demo.js
+bun run db:reset
+bun run seed:demo
 ```
 
-4. **Start the application**
-```bash
-# Terminal 1: Start Backend (from server folder)
-cd server
-node index.js
+Start both development servers:
 
-# Terminal 2: Start Frontend (from root folder)
-npm run dev
+```bash
+bun run dev
 ```
 
-5. **Access the application**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+Useful URLs:
 
-### Test Users
+- Web: http://localhost:3000
+- API: http://localhost:5000
 
-After seeding the database:
+## Common Commands
 
-| Role     | Email                        | Password    |
-|----------|------------------------------|-------------|
-| Donor    | rahul@example.com            | password123 |
-| Hospital | cityhospital@example.com     | password123 |
-| Admin    | admin@lifedrops.com          | admin123    |
+```bash
+bun run dev          # run web and API through Turborepo
+bun run dev:web      # run only the Next.js app
+bun run dev:server   # run only the Express API
+bun run build        # build all packages
+bun run typecheck    # typecheck all packages
+bun run lint         # lint/check all packages
+```
 
-## 📚 Documentation
+## Environment
 
-All project documentation is organized in the [`docs/`](docs/) folder:
+The default local database matches `docker-compose.yml`:
 
-- **[Quick Start Guide](docs/QUICK_SETUP_AFTER_FIX.md)** - Detailed setup instructions
-- **[Viva Presentation Guide](docs/VIVA_PRESENTATION_GUIDE.md)** - Complete guide for demo/presentation
-- **[System Architecture](docs/SYSTEM_ARCHITECTURE.md)** - Architecture overview
-- **[Final Project Status](docs/FINAL_PROJECT_STATUS.md)** - Current status and features
-- **[Documentation Index](docs/INDEX.md)** - Complete documentation index
+```env
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=password
+POSTGRES_DB=blood_donation
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5433
+PORT=5000
+NEXT_PUBLIC_API_URL=http://localhost:5000
+```
 
-## 🏗️ Technology Stack
+The API currently defaults to those local database values when no `.env` is present. Add package-specific env files when needed:
 
-**Frontend:**
-- Next.js 16 (React framework)
-- TypeScript
-- Tailwind CSS
-- Lucide React (icons)
+- `apps/server/.env` for API/database settings
+- `apps/web/.env.local` for browser-visible Next.js settings such as `NEXT_PUBLIC_API_URL`
 
-**Backend:**
-- Node.js + Express.js
-- PostgreSQL
-- bcrypt (password hashing)
+## Demo Users
 
-## ✨ Key Features
+After seeding:
 
-- ✅ User authentication with role-based access
-- ✅ Hospital blood request creation
-- ✅ Admin approval/rejection system
-- ✅ Donor request acceptance
-- ✅ Real-time inventory management
-- ✅ Donation history tracking
-- ✅ Responsive dark theme UI
-- ✅ Transaction-safe database operations
+| Role | Email | Password |
+| --- | --- | --- |
+| Donor | donor1@lifedrops.demo | Demo@123 |
+| Hospital | hospital1@lifedrops.demo | Demo@123 |
+| Admin | admin@lifedrops.demo | Admin@123 |
 
-## 📖 Learn More About Next.js
+## Notes
 
-This project is built with Next.js. To learn more:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial
-- [Next.js GitHub repository](https://github.com/vercel/next.js)
-
-## 🚀 Deployment
-
-For deployment instructions, see [DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md).
-
-The easiest way to deploy the Next.js frontend is using the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
-
-## 📝 License
-
-This project is for educational purposes.
-
-## 🤝 Contributing
-
-This is an educational project. For questions or suggestions, please refer to the documentation in the `docs/` folder.
-
----
-
-**For detailed documentation, guides, and troubleshooting, see the [`docs/`](docs/) folder.**
+- Bun is the package manager for this repo; `bun.lock` is the workspace lockfile.
+- Turborepo package tasks live in each package. The root `package.json` only delegates through `turbo run`.
+- The server source is TypeScript in `apps/server/src` and compiles to `apps/server/dist`.
