@@ -199,16 +199,18 @@ export default function DashboardOverview() {
         </div>
       </div>
 
-      {/* Critical Stock Alerts */}
-      <section>
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-rose-500/10 rounded-lg">
-             <AlertCircle className="w-4 h-4 text-rose-500" />
+      {/* Critical stock alerts — hospital inventory view only */}
+      {userRole !== "donor" && userRole !== "admin" && (
+        <section>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-rose-500/10 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+            </div>
+            <h2 className="text-xs font-black text-white uppercase tracking-widest">Inventory Vulnerabilities</h2>
           </div>
-          <h2 className="text-xs font-black text-white uppercase tracking-widest">Inventory Vulnerabilities</h2>
-        </div>
-        <LowStockAlert />
-      </section>
+          <LowStockAlert />
+        </section>
+      )}
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
